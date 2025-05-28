@@ -5,9 +5,9 @@ import pydicom
 from pydicom.tag import Tag
 from tqdm import tqdm
 import multiprocessing
-
+from nibabel.orientations import affaxcodes, io_orientation
 def is_image_series(dicom_path):
-    # 유효한 CT 이미지 시리즈 여부 확인
+    ## 유효한 CT 이미지 시리즈인지 확인하는 코드, 부여된 ds.Modality와 UID, hasattr이 CT에 부여된 게 맞는지 조금 더 확장된 버전 
     try:
         ds = pydicom.dcmread(dicom_path, stop_before_pixels=True, force=True)
         return (
@@ -19,12 +19,12 @@ def is_image_series(dicom_path):
         return False
 
 def get_slice_position(dicom_path):
-    # DICOM 슬라이스의 Z축 위치 추출
+    ##x, y 좌표는 괜찮은데 Slice Increment 방지용으로 디버깅 해볼 데이터
     ds = pydicom.dcmread(dicom_path, stop_before_pixels=True, force=True)
     return float(ds.ImagePositionPatient[2])
 
 def validate_dicom_series(dicom_folder):
-    # DICOM 시리즈 유효성 검증 및 정렬된 슬라이스 반환
+    ##DICOM 시리즈 유효성 검증 및 정렬된 슬라이스 반환
     slices = []
     for fname in os.listdir(dicom_folder):
         if not fname.lower().endswith('.dcm'):
@@ -59,6 +59,9 @@ def validate_coordinate_system(dicom_slices, nifti_img):
     # NIfTI 방향 정보 변환
     nifti_affine = nifti_img.affine
     nifti_orientation = nib.aff2axcodes(nifti_affine)
+
+    print("DICOM ImageOrientationPatient:", dicom_orientation)
+    print("NIfTI Orientation (affine):", nifti_orient)
     
     # 좌표계 일치 여부 검증
     if nifti_orientation not in [('R', 'A', 'S'), ('L', 'P', 'I')]:
@@ -122,14 +125,14 @@ def main():
     if os.path.commonpath([ct_base, output_base]) == ct_base:
         raise ValueError("출력 경로가 입력 경로 내에 있습니다")
     
-    # 환자 목록 준비
+    ##Normal 환자에 대해서만이긴 하지만... 
     patients = [
         (folder, ct_base, seg_base, output_base)
         for folder in os.listdir(ct_base)
         if folder.isdigit() and os.path.isdir(os.path.join(ct_base, folder))
     ]
 
-    # 병렬 처리
+    ##연습 삼아 빠르게 시도 가능한지 병렬처리 도전
     with multiprocessing.Pool() as pool:
         results = list(tqdm(
             pool.imap(process_patient, patients),
@@ -137,7 +140,7 @@ def main():
             desc="환자 처리 진행 상황"
         ))
 
-    # 결과 요약
+    ##성공 케이스 셀 수 있도록 조정
     print("\n처리 결과:")
     success = 0
     for pid, status, path in results:
